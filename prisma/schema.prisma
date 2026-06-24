@@ -1,0 +1,93 @@
+// Skema database Racik API
+// Author: Raihan Haykal
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id      Int      @id @default(autoincrement())
+  nama    String
+  emoji   String
+  recipes Recipe[]
+}
+
+model Ingredient {
+  id                Int                @id @default(autoincrement())
+  nama              String             @unique
+  staple            Boolean            @default(false) // bumbu dasar (selalu dianggap ada)
+  recipeIngredients RecipeIngredient[]
+  pantryItems       PantryItem[]
+}
+
+model Recipe {
+  id              Int                @id @default(autoincrement())
+  judul           String
+  deskripsi       String
+  imageUrl        String
+  categoryId      Int
+  category        Category           @relation(fields: [categoryId], references: [id])
+  waktuMasakMenit Int
+  kesulitan       String // Mudah / Sedang / Sulit
+  porsi           Int
+  langkah         Json // array langkah memasak (string[])
+  createdAt       DateTime           @default(now())
+  bahan           RecipeIngredient[]
+  reviews         Review[]
+  favorites       Favorite[]
+}
+
+model RecipeIngredient {
+  id           Int        @id @default(autoincrement())
+  recipeId     Int
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredientId Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  jumlah       String
+  optional     Boolean    @default(false)
+
+  @@index([recipeId])
+}
+
+model Review {
+  id          Int      @id @default(autoincrement())
+  recipeId    Int
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  deviceId    String
+  namaPenulis String
+  rating      Int // 1..5 (wajib)
+  komentar    String   @default("") // opsional
+  createdAt   DateTime @default(now())
+
+  @@unique([recipeId, deviceId]) // 1 ulasan per resep per device
+  @@index([recipeId])
+}
+
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  recipeId  Int
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  deviceId  String
+  createdAt DateTime @default(now())
+
+  @@unique([recipeId, deviceId])
+  @@index([deviceId])
+}
+
+model PantryItem {
+  id           Int        @id @default(autoincrement())
+  deviceId     String
+  ingredientId Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  note         String     @default("") // catatan bebas: bagian, exp date, rasa, dll
+  selected     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  @@unique([deviceId, ingredientId])
+  @@index([deviceId])
+}
