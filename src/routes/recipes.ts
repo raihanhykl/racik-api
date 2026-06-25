@@ -1,15 +1,29 @@
 // Author: Raihan Haykal
 import { Router } from "express";
 import { prisma } from "../prisma";
-import { recipeInclude, toRecipeDTO, computeMatch, relatif } from "../dto";
+import {
+  recipeInclude,
+  recipeListInclude,
+  toRecipeDTO,
+  toRecipeListDTO,
+  computeMatch,
+  relatif,
+} from "../dto";
 import { deviceId } from "../device";
 
 const router = Router();
 
-// GET /api/recipes?category=&search=
+function paging(req: any, defLimit: number, maxLimit: number) {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(maxLimit, Math.max(1, Number(req.query.limit) || defLimit));
+  return { page, limit, skip: (page - 1) * limit };
+}
+
+// GET /api/recipes?category=&search=&page=&limit=  (paginasi + payload ringan)
 router.get("/", async (req, res) => {
   const category = req.query.category ? Number(req.query.category) : undefined;
   const search = ((req.query.search as string | undefined) ?? "").trim();
+  const { page, limit, skip } = paging(req, 12, 50);
 
   const where: any = {};
   if (category) where.categoryId = category;
@@ -20,12 +34,24 @@ router.get("/", async (req, res) => {
     ];
   }
 
-  const recipes = await prisma.recipe.findMany({
-    where,
-    include: recipeInclude,
-    orderBy: { id: "asc" },
+  const [total, items] = await Promise.all([
+    prisma.recipe.count({ where }),
+    prisma.recipe.findMany({
+      where,
+      include: recipeListInclude,
+      orderBy: { id: "asc" },
+      skip,
+      take: limit,
+    }),
+  ]);
+
+  res.json({
+    items: items.map(toRecipeListDTO),
+    page,
+    limit,
+    total,
+    hasMore: skip + items.length < total,
   });
-  res.json(recipes.map(toRecipeDTO));
 });
 
 // POST /api/recipes/match   body { ingredientIds: number[] }
@@ -36,16 +62,18 @@ router.post("/match", async (req, res) => {
   const pantry = new Set<number>(ids);
 
   const recipes = await prisma.recipe.findMany({ include: recipeInclude });
-  const results = recipes.map((r) => computeMatch(r, pantry));
+  const results = recipes
+    .map((r) => computeMatch(r, pantry))
+    .filter((m) => m.matchPercent > 0 || m.bisaDimasak);
   results.sort((a, b) => {
     if (a.bisaDimasak !== b.bisaDimasak) return a.bisaDimasak ? -1 : 1;
     if (a.matchPercent !== b.matchPercent) return b.matchPercent - a.matchPercent;
     return a.bahanKurang.length - b.bahanKurang.length;
   });
-  res.json(results);
+  res.json(results.slice(0, 40)); // batasi payload
 });
 
-// GET /api/recipes/:id
+// GET /api/recipes/:id  (lengkap)
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
   const r = await prisma.recipe.findUnique({ where: { id }, include: recipeInclude });

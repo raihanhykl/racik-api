@@ -1,7 +1,7 @@
 // Author: Raihan Haykal
 import { Router } from "express";
 import { prisma } from "../prisma";
-import { recipeInclude, toRecipeDTO } from "../dto";
+import { recipeListInclude, toRecipeListDTO } from "../dto";
 import { deviceId } from "../device";
 
 const router = Router();
@@ -15,10 +15,10 @@ router.get("/", async (req, res) => {
   }
   const favs = await prisma.favorite.findMany({
     where: { deviceId: dev },
-    include: { recipe: { include: recipeInclude } },
+    include: { recipe: { include: recipeListInclude } },
     orderBy: { createdAt: "desc" },
   });
-  res.json(favs.map((f) => toRecipeDTO(f.recipe)));
+  res.json(favs.map((f) => toRecipeListDTO(f.recipe)));
 });
 
 // POST /api/favorites/:recipeId

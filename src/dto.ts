@@ -1,11 +1,17 @@
 // Author: Raihan Haykal
 import { Prisma } from "@prisma/client";
 
-/** Relasi yang selalu disertakan saat mengambil resep. */
+/** Relasi lengkap (dipakai halaman DETAIL & matching). */
 export const recipeInclude = {
   category: true,
   reviews: { select: { rating: true } },
   bahan: { include: { ingredient: true } },
+} satisfies Prisma.RecipeInclude;
+
+/** Relasi ringan (dipakai LIST: tanpa bahan/langkah agar payload kecil). */
+export const recipeListInclude = {
+  category: true,
+  reviews: { select: { rating: true } },
 } satisfies Prisma.RecipeInclude;
 
 export function avgRating(reviews: { rating: number }[]): number {
@@ -14,8 +20,8 @@ export function avgRating(reviews: { rating: number }[]): number {
   return Math.round((sum / reviews.length) * 10) / 10;
 }
 
-/** Membentuk respons resep agar sesuai dengan model di aplikasi mobile. */
-export function toRecipeDTO(r: any) {
+/** DTO ringan untuk daftar/kartu resep (tanpa bahan & langkah). */
+export function toRecipeListDTO(r: any) {
   return {
     id: r.id,
     judul: r.judul,
@@ -29,6 +35,15 @@ export function toRecipeDTO(r: any) {
     porsi: r.porsi,
     rating: avgRating(r.reviews ?? []),
     jumlahUlasan: r.reviews ? r.reviews.length : 0,
+    bahan: [],
+    langkah: [],
+  };
+}
+
+/** DTO lengkap untuk halaman detail resep. */
+export function toRecipeDTO(r: any) {
+  return {
+    ...toRecipeListDTO(r),
     bahan: (r.bahan ?? []).map((b: any) => ({
       ingredientId: b.ingredientId,
       nama: b.ingredient?.nama ?? "",
@@ -40,14 +55,14 @@ export function toRecipeDTO(r: any) {
   };
 }
 
-/** Algoritma pencocokan resep dengan bahan yang dimiliki (sama dengan di mobile). */
+/** Algoritma pencocokan resep dengan bahan yang dimiliki. */
 export function computeMatch(recipe: any, pantry: Set<number>) {
   let total = 0;
   let cocok = 0;
   const bahanKurang: any[] = [];
 
   for (const b of recipe.bahan) {
-    if (b.ingredient?.staple || b.optional) continue; // abaikan bumbu dasar & opsional
+    if (b.ingredient?.staple || b.optional) continue;
     total++;
     if (pantry.has(b.ingredientId)) {
       cocok++;
@@ -66,7 +81,7 @@ export function computeMatch(recipe: any, pantry: Set<number>) {
   const bisaDimasak = total > 0 && bahanKurang.length === 0;
 
   return {
-    recipe: toRecipeDTO(recipe),
+    recipe: toRecipeListDTO(recipe), // ringan: kartu hasil tak perlu bahan/langkah
     matchPercent,
     bisaDimasak,
     totalWajib: total,
